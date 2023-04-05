@@ -1,306 +1,240 @@
-import copy
-import sys
-import pygame
-import random
 import numpy as np
+import time
 
-from constants import *
-
-# --- PYGAME SETUP ---
-
-pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption('TIC TAC TOE AI')
-screen.fill(BG_COLOR)
+# Step 1: Create the board
+board = np.zeros((3, 3, 3))
 
 
-# --- CLASSES ---
+# Step 2: Display the board
+def display_board(board: object) -> object:
+    """
 
-class Board:
-
-    def __init__(self):
-        self.squares = np.zeros((ROWS, COLS))
-        self.empty_sqrs = self.squares  # [squares]
-        self.marked_sqrs = 0
-
-    def final_state(self, show=False):
-        '''
-            @return 0 if there is no win yet
-            @return 1 if player 1 wins
-            @return 2 if player 2 wins
-        '''
-
-        # vertical wins
-        for col in range(COLS):
-            if self.squares[0][col] == self.squares[1][col] == self.squares[2][col] != 0:
-                if show:
-                    color = CIRC_COLOR if self.squares[0][col] == 2 else CROSS_COLOR
-                    iPos = (col * SQSIZE + SQSIZE // 2, 20)
-                    fPos = (col * SQSIZE + SQSIZE // 2, HEIGHT - 20)
-                    pygame.draw.line(screen, color, iPos, fPos, LINE_WIDTH)
-                return self.squares[0][col]
-
-        # horizontal wins
-        for row in range(ROWS):
-            if self.squares[row][0] == self.squares[row][1] == self.squares[row][2] != 0:
-                if show:
-                    color = CIRC_COLOR if self.squares[row][0] == 2 else CROSS_COLOR
-                    iPos = (20, row * SQSIZE + SQSIZE // 2)
-                    fPos = (WIDTH - 20, row * SQSIZE + SQSIZE // 2)
-                    pygame.draw.line(screen, color, iPos, fPos, LINE_WIDTH)
-                return self.squares[row][0]
-
-        # desc diagonal
-        if self.squares[0][0] == self.squares[1][1] == self.squares[2][2] != 0:
-            if show:
-                color = CIRC_COLOR if self.squares[1][1] == 2 else CROSS_COLOR
-                iPos = (20, 20)
-                fPos = (WIDTH - 20, HEIGHT - 20)
-                pygame.draw.line(screen, color, iPos, fPos, CROSS_WIDTH)
-            return self.squares[1][1]
-
-        # asc diagonal
-        if self.squares[2][0] == self.squares[1][1] == self.squares[0][2] != 0:
-            if show:
-                color = CIRC_COLOR if self.squares[1][1] == 2 else CROSS_COLOR
-                iPos = (20, HEIGHT - 20)
-                fPos = (WIDTH - 20, 20)
-                pygame.draw.line(screen, color, iPos, fPos, CROSS_WIDTH)
-            return self.squares[1][1]
-
-        # no win yet
-        return 0
-
-    def mark_sqr(self, row, col, player):
-        self.squares[row][col] = player
-        self.marked_sqrs += 1
-
-    def empty_sqr(self, row, col):
-        return self.squares[row][col] == 0
-
-    def get_empty_sqrs(self):
-        empty_sqrs = []
-        for row in range(ROWS):
-            for col in range(COLS):
-                if self.empty_sqr(row, col):
-                    empty_sqrs.append((row, col))
-
-        return empty_sqrs
-
-    def isfull(self):
-        return self.marked_sqrs == 9
-
-    def isempty(self):
-        return self.marked_sqrs == 0
+    :rtype: object
+    """
+    print(board)
 
 
-class AI:
+# Step 3: Check for a winner
+def check_winner(board):
+    # Check rows
+    for i in range(3):
+        for j in range(3):
+            if board[i, j, 0] == board[i, j, 1] == board[i, j, 2] != 0:
+                return True, board[i, j, 0]
 
-    def __init__(self, level=1, player=2):
-        self.level = level
-        self.player = player
+    # Check columns
+    for i in range(3):
+        for j in range(3):
+            if board[0, i, j] == board[1, i, j] == board[2, i, j] != 0:
+                return True, board[0, i, j]
 
-    # --- RANDOM ---
+    # Check diagonals
+    if board[0, 0, 0] == board[1, 1, 1] == board[2, 2, 2] != 0:
+        return True, board[0, 0, 0]
+    if board[0, 2, 0] == board[1, 1, 1] == board[2, 0, 2] != 0:
+        return True, board[0, 2, 0]
 
-    def rnd(self, board):
-        empty_sqrs = board.get_empty_sqrs()
-        idx = random.randrange(0, len(empty_sqrs))
+    # Check for tie
+    if np.all(board != 0):
+        return True, None
 
-        return empty_sqrs[idx]  # (row, col)
-
-    # --- MINIMAX ---
-
-    def minimax(self, board, maximizing):
-
-        # terminal case
-        case = board.final_state()
-
-        # player 1 wins
-        if case == 1:
-            return 1, None  # eval, move
-
-        # player 2 wins
-        if case == 2:
-            return -1, None
-
-        # draw
-        elif board.isfull():
-            return 0, None
-
-        if maximizing:
-            max_eval = -100
-            best_move = None
-            empty_sqrs = board.get_empty_sqrs()
-
-            for (row, col) in empty_sqrs:
-                temp_board = copy.deepcopy(board)
-                temp_board.mark_sqr(row, col, 1)
-                eval = self.minimax(temp_board, False)[0]
-                if eval > max_eval:
-                    max_eval = eval
-                    best_move = (row, col)
-
-            return max_eval, best_move
-
-        elif not maximizing:
-            min_eval = 100
-            best_move = None
-            empty_sqrs = board.get_empty_sqrs()
-
-            for (row, col) in empty_sqrs:
-                temp_board = copy.deepcopy(board)
-                temp_board.mark_sqr(row, col, self.player)
-                eval = self.minimax(temp_board, True)[0]
-                if eval < min_eval:
-                    min_eval = eval
-                    best_move = (row, col)
-
-            return min_eval, best_move
-
-    # --- MAIN EVAL ---
-
-    def eval(self, main_board):
-        if self.level == 0:
-            # random choice
-            eval = 'random'
-            move = self.rnd(main_board)
-        else:
-            # minimax algo choice
-            eval, move = self.minimax(main_board, False)
-
-        print(f'AI has chosen to mark the square in pos {move} with an eval of: {eval}')
-
-        return move  # row, col
+    return False, None
 
 
-class Game:
-
-    def __init__(self):
-        self.board = Board()
-        self.ai = AI()
-        self.player = 1  # 1-cross  #2-circles
-        self.gamemode = 'ai'  # pvp or ai
-        self.running = True
-        self.show_lines()
-
-    # --- DRAW METHODS ---
-
-    def show_lines(self):
-        # bg
-        screen.fill(BG_COLOR)
-
-        # vertical
-        pygame.draw.line(screen, LINE_COLOR, (SQSIZE, 0), (SQSIZE, HEIGHT), LINE_WIDTH)
-        pygame.draw.line(screen, LINE_COLOR, (WIDTH - SQSIZE, 0), (WIDTH - SQSIZE, HEIGHT), LINE_WIDTH)
-
-        # horizontal
-        pygame.draw.line(screen, LINE_COLOR, (0, SQSIZE), (WIDTH, SQSIZE), LINE_WIDTH)
-        pygame.draw.line(screen, LINE_COLOR, (0, HEIGHT - SQSIZE), (WIDTH, HEIGHT - SQSIZE), LINE_WIDTH)
-
-    def draw_fig(self, row, col):
-        if self.player == 1:
-            # draw cross
-            # desc line
-            start_desc = (col * SQSIZE + OFFSET, row * SQSIZE + OFFSET)
-            end_desc = (col * SQSIZE + SQSIZE - OFFSET, row * SQSIZE + SQSIZE - OFFSET)
-            pygame.draw.line(screen, CROSS_COLOR, start_desc, end_desc, CROSS_WIDTH)
-            # asc line
-            start_asc = (col * SQSIZE + OFFSET, row * SQSIZE + SQSIZE - OFFSET)
-            end_asc = (col * SQSIZE + SQSIZE - OFFSET, row * SQSIZE + OFFSET)
-            pygame.draw.line(screen, CROSS_COLOR, start_asc, end_asc, CROSS_WIDTH)
-
-        elif self.player == 2:
-            # draw circle
-            center = (col * SQSIZE + SQSIZE // 2, row * SQSIZE + SQSIZE // 2)
-            pygame.draw.circle(screen, CIRC_COLOR, center, RADIUS, CIRC_WIDTH)
-
-    # --- OTHER METHODS ---
-
-    def make_move(self, row: object, col: object) -> object:
-        self.board.mark_sqr(row, col, self.player)
-        self.draw_fig(row, col)
-        self.next_turn()
-
-    def next_turn(self):
-        self.player = self.player % 2 + 1
-
-    def change_gamemode(self):
-        self.gamemode = 'ai' if self.gamemode == 'pvp' else 'pvp'
-
-    def isover(self):
-        return self.board.final_state(show=True) != 0 or self.board.isfull()
-
-    def reset(self):
-        self.__init__()
-
-
-def main():
-    # --- OBJECTS ---
-
-    game = Game()
-    board = game.board
-    ai = game.ai
-
-    # --- MAINLOOP ---
-
+# Step 4: Get player's move
+def get_player_move():
     while True:
-
-        # pygame events
-        for event in pygame.event.get():
-
-            # quit event
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-
-            # keydown event
-            if event.type == pygame.KEYDOWN:
-
-                # g-gamemode
-                if event.key == pygame.K_g:
-                    game.change_gamemode()
-
-                # r-restart
-                if event.key == pygame.K_r:
-                    game.reset()
-                    board = game.board
-                    ai = game.ai
-
-                # 0-random ai
-                if event.key == pygame.K_0:
-                    ai.level = 0
-
-                # 1-random ai
-                if event.key == pygame.K_1:
-                    ai.level = 1
-
-            # click event
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                pos = event.pos
-                row = pos[1] // SQSIZE
-                col = pos[0] // SQSIZE
-
-                # human mark sqr
-                if board.empty_sqr(row, col) and game.running:
-                    game.make_move(row, col)
-
-                    if game.isover():
-                        game.running = False
-
-        # AI initial call
-        if game.gamemode == 'ai' and game.player == ai.player and game.running:
-
-            # update the screen
-            pygame.display.update()
-
-            # eval
-            row, col = ai.eval(board)
-            game.make_move(row, col)
-
-            if game.isover():
-                game.running = False
-
-        pygame.display.update()
+        try:
+            move = tuple(map(int, input("Enter your move (x,y,z): ").split(',')))
+            if board[move] == 0:
+                return move
+            else:
+                print("Invalid move, try again")
+        except ValueError:
+            print("Invalid input, try again")
 
 
-main()
+# Step 5: Get AI player's move using Minimax with alpha-beta pruning
+def get_ai_move(board, level, player):
+    if level == 1:
+        # Easy level: choose a random move
+        return tuple(np.random.randint(0, 3, 3))
+    elif level == 2:
+        pass  # TODO: Implement medium level AI
+    elif level == 3:
+        # Hard level: use Minimax with alpha-beta pruning to find the best move
+        _, move = minimax(board, player, player, -np.inf, np.inf)
+        return move
+
+
+def minimax(board, player, current_player, alpha, beta):
+    winner, winner_symbol = check_winner(board)
+    if winner:
+        if winner_symbol is None:
+            return 0, None
+        elif winner_symbol == player:
+            return 1 if current_player == player else -1, None
+        else:
+            return -1 if current_player == player else 1, None
+
+    if current_player == player:
+        # Maximize score
+        score = -np.inf
+        best_move = None
+        for move in get_possible_moves(board):
+            new_board = make_move(board, move, player)
+            child_score, _ = minimax(new_board, player, 3 - player, alpha, beta)
+            if child_score > score:
+                score = child_score
+                best_move = move
+            alpha = max(alpha, score)
+            if beta <= alpha:
+                break  # Beta cut-off
+        return score, best_move
+    else:
+        # Minimize score
+        score = np.inf
+        best_move = None
+        for move in get_possible_moves(board):
+            new_board = make_move(board, move, 3 - player)
+            child_score, _ = minimax(new_board, player, 3 - player, alpha, beta)
+            if child_score < score:
+                score = child_score
+                best_move = move
+            beta = min(beta, score)
+            if beta <= alpha:
+                break  # Alpha cut-off
+        return score, best_move
+
+
+def get_possible_moves(board):
+    moves = []
+    for i in range(3):
+        for j in range(3):
+            for k in range(3):
+                if board[i, j, k] == 0:
+                    moves.append((i, j, k))
+    return moves
+
+
+def make_move(board, move, player):
+    new_board = board.copy()
+    new_board[move] = player
+    return new_board
+
+
+# Step 6: Determine level of difficulty for AI player
+def get_ai_level():
+    while True:
+        try:
+            level = int(input("Enter AI level (1=easy, 2=medium, 3=hard): "))
+            if level in [1, 2, 3]:
+                return level
+            else:
+                print("Invalid level, try again")
+        except ValueError:
+            print("the invalid input try again")
+        # Step 7: Play the game
+        # def play_game(): # Display welcome message print("Welcome to 3D Tic-Tac-Toe!") time.sleep(1)
+
+        # Get level of difficulty for AI player
+        ai_level = get_ai_level()
+        time.sleep(1)
+
+        # Display the board
+        print("Here's the board:")
+        display_board(board)
+        time.sleep(1)
+
+        # Choose player 1 (X) or player 2 (O) randomly
+        player = np.random.choice([1, 2])
+        print(f"Player {player} goes first.")
+        time.sleep(1)
+
+  # Play the game
+def play_game():
+    # Step 1: Create the board
+    board = np.zeros((3, 3, 3))
+
+    # Display welcome message
+    print("Welcome to 3D Tic-Tac-Toe!")
+    time.sleep(1)
+
+    # Choose game type
+    while True:
+        game_type = input("Choose game type (1=human vs human, 2=human vs AI): ")
+        if game_type == "1":
+            player1, player2 = "X", "O"
+            break
+        elif game_type == "2":
+            player1 = input("Choose player 1 (X) or let the computer choose randomly (R): ").upper()
+            if player1 == "R":
+                player1 = np.random.choice(["X", "O"])
+            player2 = "X" if player1 == "O" else "O"
+            break
+        else:
+            print("Invalid choice, try again")
+
+    # Get level of difficulty for AI player
+    if game_type == "2":
+        ai_level = get_ai_level()
+        time.sleep(1)
+
+    # Display the board
+    print("Here's the board:")
+    display_board(board)
+    time.sleep(1)
+
+    # Choose player 1 (X) or player 2 (O) randomly
+    current_player = np.random.choice([player1, player2])
+    print(f"{current_player} goes first!")
+    time.sleep(1)
+
+    # Main game loop
+    while True:
+        # Get move from player
+        if current_player == player1:
+            print(f"It's {current_player}'s turn!")
+            move = get_player_move()
+        else:
+            print(f"It's {current_player}'s turn (AI)!")
+            move = get_ai_move(board, ai_level, 3 - int(player1 == "X"))
+
+        # Make the move
+        board = make_move(board, move, 1 if current_player == "X" else 2)
+        display_board(board)
+
+        # Check for a winner
+        winner, winner_symbol = check_winner(board)
+        if winner:
+            if winner_symbol is None:
+                print("It's a tie!")
+            elif winner_symbol == "X":
+                print("Player 1 (X) wins!")
+            else:
+                print("Player 2 (O) wins!")
+            break
+
+        # Switch players
+        current_player = player1 if current_player == player2 else player2
+
+
+# Ask if players want to play again
+while True:
+    try:
+        play_again = input("Do you want to play again? (y/n): ")
+        if play_again.lower() == 'y':
+            board = np.zeros((3, 3, 3))
+            play_game()
+        elif play_again.lower() == 'n':
+            print("Thanks for playing!")
+            break
+        else:
+            print("Invalid input, try again")
+    except ValueError:
+        print("Invalid input, try again")
+    def main() -> object:
+     play_game()
+
+    if __name__ == '__main__':
+        main()
